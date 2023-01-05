@@ -7,16 +7,20 @@ import win32api
 
 from PyQt6.QtWidgets import (QMainWindow, QApplication, QWidget, QPushButton, QLabel, QComboBox,
                              QSizePolicy, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit)
-from PyQt6.QtCore import *
 from PyQt6.QtGui import QFont, QKeySequence, QTextOption, QCloseEvent
-
+from PyQt6.QtCore import Qt, QTimer
 from typing import List, Tuple
+
 from time import sleep as wait
 
+
+# Type aliases for better readability
 Handle = int
 Hexadecimal = int
 
 
+# Bindings for the keys and their hexadecimal values
+# in WIN32 API
 class Keys:
     W = 0x57
     A = 0x41
@@ -25,43 +29,9 @@ class Keys:
     SPACE = 0x20
 
 
-class Path:
-
-    def __init__(self, length, variation):
-        '''
-        Creates a new path with a given length and variation
-        :param length: The length of the path in pressed keys
-        :param variation: The variation of the path (percentage of differring keys)
-        '''
-        self.length = length
-        self.variation = variation
-
-        self.generate()
-
-    def generate(self):
-        '''Generates a random path depending on the length and variation'''
-        self.path = []
-        for key in 'wasd':
-            self.path.append((key, 0.2 + random.uniform(-0.2, 0.2)))
-
-    def to_wasd_sequence(self) -> List[Tuple[Hexadecimal, float]]:
-        '''
-        Converts the path to a sequence of WASD keys and their press times
-        :return: A list of tuples containing the key and the press time in a tuple
-        '''
-        sequence = []
-        for key, times in self.path:
-            if key == 'w':
-                sequence.append((Keys.W, times))
-            elif key == 'a':
-                sequence.append((Keys.A, times))
-            elif key == 's':
-                sequence.append((Keys.S, times))
-            elif key == 'd':
-                sequence.append((Keys.D, times))
-        return sequence
-
-
+# Main class implemeting Thread classe's run and
+# stop methods for sending key presses to the game
+# separated from the GUI
 class AntiAFK(threading.Thread):
     LIGHT_MODE = 'Light'
     HEAVY_MODE = 'Heavy'
@@ -123,16 +93,16 @@ class AntiAFK(threading.Thread):
         '''
 
         while self.running:
-            self.path = Path(10, 0.5)
+            self.path = [(Keys.W, self.DEFAULT_PRESS_TIME),(Keys.A, self.DEFAULT_PRESS_TIME),
+                         (Keys.S, self.DEFAULT_PRESS_TIME),(Keys.D, self.DEFAULT_PRESS_TIME)]
 
-            for key, time in self.path.to_wasd_sequence():
+            for key, time in self.path:
                 self.send_key(key, time)
                 wait(self.DEFAULT_PRESS_TIME)
 
     def run(self):
         '''Starts the anti afk thread'''
         self.running = True
-        # win = win32ui.CreateWindowFromHandle(self.valorant_hwnd)
         if self.mode == self.LIGHT_MODE:
             self.light_mode()
         elif self.mode == self.HEAVY_MODE:
@@ -143,6 +113,7 @@ class AntiAFK(threading.Thread):
         self.running = False
 
 
+# GUI class for the AntiAFK program powered by PyQt6
 class MainWindow(QMainWindow):
 
     class AntiAFKStatus:
@@ -212,12 +183,12 @@ class MainWindow(QMainWindow):
         self.controls_layout.addWidget(self.console)
 
         # Group for the controls
-        controls_group = QGroupBox("Controls")
-        controls_group.setLayout(self.controls_layout)
+        self.controls_group = QGroupBox("Controls")
+        self.controls_group.setLayout(self.controls_layout)
 
         # VALORANT window status
         self.window_status_label = QLabel()
-        self.log(f"VALORANT window status: {self.valorant_status}")
+        self.log(f"VALORANT window status: {self.valorant_status()}")
 
         # Mode selection
         mode_label = QLabel("Mode:")
@@ -244,7 +215,7 @@ class MainWindow(QMainWindow):
         self.main_layout = QHBoxLayout()
         self.main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         # self.main_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
-        self.main_layout.addWidget(controls_group)
+        self.main_layout.addWidget(self.controls_group)
         self.main_layout.addWidget(settings_group)
 
         # Main central widget for the window
@@ -252,6 +223,11 @@ class MainWindow(QMainWindow):
         self.main_widget.setLayout(self.main_layout)
 
         self.setCentralWidget(self.main_widget)
+
+        # Run valorant_status every 5 seconds
+        self.valorant_status_timer = QTimer()
+        self.valorant_status_timer.timeout.connect(self.valorant_status)
+        self.valorant_status_timer.start(5000)
 
     def find_window(self, window_name) -> Handle | None:
         windows = []
@@ -261,7 +237,7 @@ class MainWindow(QMainWindow):
             if window_name in win32gui.GetWindowText(window):
                 return window
 
-    @property
+
     def valorant_status(self):
         '''Returns True if VALORANT is found, False if not'''
         window = self.find_window("VALORANT")
@@ -273,7 +249,7 @@ class MainWindow(QMainWindow):
         else:
             self.window_status_label.setText(
                 f"VALORANT: {self.VALORANTStatus.NOT_FOUND}")
-            self.controls_layout.setEnabled(False)
+            self.controls_group.setEnabled(False)
             return False
 
     @property
@@ -338,7 +314,9 @@ class MainWindow(QMainWindow):
 
     def close(self, a0: QCloseEvent):
         '''Stops the AntiAFK thread when the window is closed'''
-        self.stop_anti_afk()
+        if self.aafk:
+            self.log("Killing AntiAFK...")
+            self.stop_anti_afk()
         a0.accept()
 
 
