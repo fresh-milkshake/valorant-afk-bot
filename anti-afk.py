@@ -8,9 +8,8 @@ import win32api
 from PyQt6.QtWidgets import (QMainWindow, QApplication, QWidget, QPushButton,
                              QLabel, QComboBox, QSizePolicy, QVBoxLayout,
                              QHBoxLayout, QGroupBox, QTextEdit, QLineEdit)
-from PyQt6.QtGui import QFont, QKeySequence, QTextOption, QCloseEvent, QIntValidator, QDoubleValidator
+from PyQt6.QtGui import QFont, QKeySequence, QTextOption, QCloseEvent, QDoubleValidator
 from PyQt6.QtCore import Qt, QTimer
-from typing import List, Tuple
 
 from time import sleep as wait
 
