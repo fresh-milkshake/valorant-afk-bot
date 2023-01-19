@@ -5,14 +5,14 @@ import win32gui
 import win32con
 import win32api
 
-from PyQt6.QtWidgets import (QMainWindow, QApplication, QWidget, QPushButton, QLabel, QComboBox,
-                             QSizePolicy, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit)
-from PyQt6.QtGui import QFont, QKeySequence, QTextOption, QCloseEvent
+from PyQt6.QtWidgets import (QMainWindow, QApplication, QWidget, QPushButton,
+                             QLabel, QComboBox, QSizePolicy, QVBoxLayout,
+                             QHBoxLayout, QGroupBox, QTextEdit, QLineEdit)
+from PyQt6.QtGui import QFont, QKeySequence, QTextOption, QCloseEvent, QIntValidator, QDoubleValidator
 from PyQt6.QtCore import Qt, QTimer
 from typing import List, Tuple
 
 from time import sleep as wait
-
 
 # Type aliases for better readability
 Handle = int
@@ -38,7 +38,10 @@ class AntiAFK(threading.Thread):
     AVALIABLE_MODES = [LIGHT_MODE, HEAVY_MODE]
     DEFAULT_PRESS_TIME = .1
 
-    def __init__(self, mode: str, hwnd: Handle):
+    def __init__(self,
+                 mode: str,
+                 hwnd: Handle,
+                 key_press_time: float = DEFAULT_PRESS_TIME):
         '''
         Creates a new AntiAFK thread
         :param mode: The mode of the AntiAFK thread
@@ -58,22 +61,41 @@ class AntiAFK(threading.Thread):
         self.running = False
 
         self._jump_delay = 5
-        self._jump_delay_diff = 3
 
         if self.mode == self.HEAVY_MODE:
             self.path = None
             self._wasd_sequence = []
+            self._key_press_time = key_press_time
+
+    @property
+    def _jump_delay_diff(self):
+        '''Returns the 1/4 of the jump delay'''
+        return self._jump_delay / 4
+
+    def update_settings(self, settings: dict):
+        '''Updates the settings of the AntiAFK thread'''
+        print(settings)
+        if self.mode == self.LIGHT_MODE:
+            self._jump_delay = float(
+                settings.get('light_mode_delay', self._jump_delay))
+            return
+
+        self._wasd_sequence = settings.get('heavy_mode_path',
+                                           self._wasd_sequence)
+        self._key_press_time = float(
+            settings.get('heavy_mode_delay', self._key_press_time))
+        
 
     @property
     def jump_delay(self):
         '''Returns a random delay between the jump delay +- jump delay difference'''
-        return random.randint(self._jump_delay - self._jump_delay_diff,
+        return random.uniform(self._jump_delay - self._jump_delay_diff,
                               self._jump_delay + self._jump_delay_diff)
 
-    def send_key(self, key: Hexadecimal, times: float = DEFAULT_PRESS_TIME):
+    def send_key(self, key: Hexadecimal, delay: float):
         '''Sends a key to the game'''
         win32api.SendMessage(self.valorant_hwnd, win32con.WM_KEYDOWN, key, 0)
-        wait(times)
+        wait(delay)
         win32api.SendMessage(self.valorant_hwnd, win32con.WM_KEYUP, key, 0)
 
     def light_mode(self):
@@ -83,7 +105,7 @@ class AntiAFK(threading.Thread):
         '''
 
         while self.running:
-            self.send_key(Keys.SPACE)
+            self.send_key(Keys.SPACE, self.DEFAULT_PRESS_TIME)
             wait(self.jump_delay)
 
     def heavy_mode(self):
@@ -93,12 +115,13 @@ class AntiAFK(threading.Thread):
         '''
 
         while self.running:
-            self.path = [(Keys.W, self.DEFAULT_PRESS_TIME),(Keys.A, self.DEFAULT_PRESS_TIME),
-                         (Keys.S, self.DEFAULT_PRESS_TIME),(Keys.D, self.DEFAULT_PRESS_TIME)]
+            self.path = [(Keys.W, self._key_press_time),
+                         (Keys.A, self._key_press_time),
+                         (Keys.S, self._key_press_time),
+                         (Keys.D, self._key_press_time)]
 
             for key, time in self.path:
                 self.send_key(key, time)
-                wait(self.DEFAULT_PRESS_TIME)
 
     def run(self):
         '''Starts the anti afk thread'''
@@ -136,9 +159,14 @@ class MainWindow(QMainWindow):
         # Define variables for the AntiAFK thread
         self.aafk = None
         self._anti_afk_status = False
+        self._anti_afk_settings = {}
         self._anti_afk_mode = AntiAFK.LIGHT_MODE
         self._console_open = False
         self._valorant_status = False
+
+        #########################
+        # Thread controls group #
+        #########################
 
         # Start button for creating new thread AntiAFK
         self.start_button = QPushButton("Start")
@@ -186,6 +214,10 @@ class MainWindow(QMainWindow):
         self.controls_group = QGroupBox("Controls")
         self.controls_group.setLayout(self.controls_layout)
 
+        ###############################
+        # Settings for AntiAFK thread #
+        ###############################
+
         # VALORANT window status
         self.window_status_label = QLabel()
         self.log(f"VALORANT window status: {self.valorant_status()}")
@@ -201,20 +233,79 @@ class MainWindow(QMainWindow):
         self.mode_layout.addWidget(mode_label)
         self.mode_layout.addWidget(mode_input)
 
+        # Creating hint QLabel and explaintaions for each mode
+        self.light_mode_explanation = "Sending <b>SPACE</b> key press to VALORANT window every <b>N</b> seconds"
+        # self.heavy_mode_explanation = "Sending sequence of keys to VALORANT like you are playing (WASD + SPACE) every N seconds"
+        self.heavy_mode_explanation = "Sending sequence of keys to <b>VALORANT</b> like you are playing <i>(WASD + SPACE)</i> every <b>N</b> seconds"
+        self.hint_label = QLabel(self.light_mode_explanation)
+        self.hint_label.setWordWrap(True)
+        self.hint_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        # Settings for each mode of AntiAFK thread (light and heavy)
+        # Light mode:
+        # - Delay between SPACE key presses
+        # Heavy mode:
+        # - Delay between pressing the key and unpressing it
+        # - Path to move along (consists of 4 directions: W, A, S, D)
+
+        # Light mode settings
+        light_mode_delay_label = QLabel("Space delay:")
+        light_mode_delay_input = QLineEdit()
+        light_mode_delay_input.setPlaceholderText("5.0")
+        light_mode_delay_input.setValidator(QDoubleValidator(0.0, 10, 4))
+        light_mode_delay_input.textChanged.connect(
+            self.change_light_mode_delay)
+
+        light_mode_settings_layout = QHBoxLayout()
+        light_mode_settings_layout.addWidget(light_mode_delay_label)
+        light_mode_settings_layout.addWidget(light_mode_delay_input)
+
+        self.light_mode_settings_group = QGroupBox("Light mode settings")
+        self.light_mode_settings_group.setLayout(light_mode_settings_layout)
+
+        # Heavy mode settings
+        heavy_mode_delay_label = QLabel("Key delay:")
+        heavy_mode_delay_input = QLineEdit()
+        heavy_mode_delay_input.setPlaceholderText("0,5")
+        heavy_mode_delay_input.setValidator(QDoubleValidator(0.0, 10, 4))
+        heavy_mode_delay_input.textChanged.connect(
+            self.change_heavy_mode_delay)
+
+        heavy_mode_path_label = QLabel("Path:")
+        heavy_mode_path_input = QLineEdit()
+        heavy_mode_path_input.setPlaceholderText("WASD")
+        heavy_mode_path_input.textChanged.connect(self.change_heavy_mode_path)
+
+        heavy_mode_settings_layout = QVBoxLayout()
+        heavy_mode_settings_layout.addWidget(heavy_mode_delay_label)
+        heavy_mode_settings_layout.addWidget(heavy_mode_delay_input)
+        heavy_mode_settings_layout.addWidget(heavy_mode_path_label)
+        heavy_mode_settings_layout.addWidget(heavy_mode_path_input)
+
+        self.heavy_mode_settings_group = QGroupBox("Heavy mode settings")
+        self.heavy_mode_settings_group.setLayout(heavy_mode_settings_layout)
+        self.heavy_mode_settings_group.hide()
+
         # Layout for all settings
         self.settings_layout = QVBoxLayout()
         self.settings_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.settings_layout.addWidget(self.window_status_label)
         self.settings_layout.addLayout(self.mode_layout)
+        self.settings_layout.addWidget(self.hint_label)
+        self.settings_layout.addWidget(self.light_mode_settings_group)
+        self.settings_layout.addWidget(self.heavy_mode_settings_group)
 
         # Group for the settings
         settings_group = QGroupBox("Settings")
         settings_group.setLayout(self.settings_layout)
 
+        ##############################
+        # Main layout for the window #
+        ##############################
+
         # Main layout for the window (controls and settings)
         self.main_layout = QHBoxLayout()
         self.main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        # self.main_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         self.main_layout.addWidget(self.controls_group)
         self.main_layout.addWidget(settings_group)
 
@@ -224,19 +315,20 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(self.main_widget)
 
-        # Run valorant_status every 5 seconds
+        # Run valorant_status every 5 seconds to
+        # refresh the VALORANT status label
         self.valorant_status_timer = QTimer()
         self.valorant_status_timer.timeout.connect(self.valorant_status)
         self.valorant_status_timer.start(5000)
 
     def find_window(self, window_name) -> Handle | None:
+        '''Returns the window handle if found, None if not'''
         windows = []
         win32gui.EnumWindows(lambda hwnd, windows: windows.append(hwnd),
                              windows)
         for window in windows:
             if window_name in win32gui.GetWindowText(window):
                 return window
-
 
     def valorant_status(self):
         '''Returns True if VALORANT is found, False if not'''
@@ -272,6 +364,47 @@ class MainWindow(QMainWindow):
         '''Changes the mode of the AntiAFK thread'''
         self.log(f"Changing AantiAFK mode to {mode}...")
         self._anti_afk_mode = mode
+
+        # Decide which label hint to show based on the current mode
+        # and update the hint label. Also, show or hide the settings
+        # for the current mode
+        if self._anti_afk_mode == AntiAFK.LIGHT_MODE:
+            self.hint_label.setText(self.light_mode_explanation)
+            self.light_mode_settings_group.show()
+            self.heavy_mode_settings_group.hide()
+        elif self._anti_afk_mode == AntiAFK.HEAVY_MODE:
+            self.hint_label.setText(self.heavy_mode_explanation)
+            self.light_mode_settings_group.hide()
+            self.heavy_mode_settings_group.show()
+
+    def update_aafk_settings(self, **kwargs: dict):
+        '''Updates the settings of the AntiAFK thread'''
+        self.log(f"Updating AntiAFK settings: {kwargs}...")
+        self._anti_afk_settings.update(kwargs)
+        if self.aafk:
+            self.aafk.update_settings(self._anti_afk_settings)
+
+    def change_light_mode_delay(self, delay):
+        delay = delay.strip().replace(",", ".")
+        '''Changes the delay of the AntiAFK thread'''
+        if not delay or not delay.isdigit():
+            return
+
+        self.log(f"Changing AntiAFK delay to {delay}...")
+        self.update_aafk_settings(light_mode_delay=delay)
+
+    def change_heavy_mode_delay(self, delay):
+        delay = delay.strip().replace(",", ".")
+        if not delay or not delay.isdigit():
+            return
+        '''Changes the delay of the AntiAFK thread'''
+        self.log(f"Changing AntiAFK delay to {delay}...")
+        self.update_aafk_settings(heavy_mode_delay=delay)
+
+    def change_heavy_mode_path(self, path):
+        '''Changes the path of the AntiAFK thread'''
+        self.log(f"Changing AntiAFK path to {path}...")
+        self.update_aafk_settings(heavy_mode_path=path)
 
     def toggle_console(self):
         '''Opens the console if it's closed, closes it if it's open'''
