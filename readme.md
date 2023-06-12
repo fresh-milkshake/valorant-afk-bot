@@ -12,6 +12,6 @@ This is a simple Anti-AFK for VALORANT. GUI is made with PyQt5 and preventing ga
 
 ## TODO
 
-- [ ] Add more modes (e.g. mouse movement, path along the map, ...)
+- [ ] Add more modes (e.g., mouse movement, path along the map, ...)
 - [ ] Add more detailed settings
-- [ ] Make window more flexible and pretty (make window save its minimum size and more)
+- [ ] Make a window more flexible and pretty (make a window save its minimum size and more)

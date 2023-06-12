@@ -1,144 +1,26 @@
-import threading
-import random
-
 import win32gui
-import win32con
-import win32api
-
-from PyQt6.QtWidgets import (QMainWindow, QApplication, QWidget, QPushButton,
-                             QLabel, QComboBox, QSizePolicy, QVBoxLayout,
-                             QHBoxLayout, QGroupBox, QTextEdit, QLineEdit)
-from PyQt6.QtGui import QFont, QKeySequence, QTextOption, QCloseEvent, QDoubleValidator
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QKeySequence, QTextOption, QFont, QDoubleValidator, QCloseEvent
+from PyQt6.QtWidgets import QMainWindow, QSizePolicy, QPushButton, QLabel, QTextEdit, QVBoxLayout, QGroupBox, QComboBox, \
+    QHBoxLayout, QLineEdit, QWidget
 
-from time import sleep as wait
-
-# Type aliases for better readability
-Handle = int
-Hexadecimal = int
-
-
-# Bindings for the keys and their hexadecimal values
-# in WIN32 API
-class Keys:
-    W = 0x57
-    A = 0x41
-    S = 0x53
-    D = 0x44
-    SPACE = 0x20
+from sender import Mode, KeySender
+from mytypes import Handle
 
 
-# Main class implemeting Thread classe's run and
-# stop methods for sending key presses to the game
-# separated from the GUI
-class AntiAFK(threading.Thread):
-    LIGHT_MODE = 'Light'
-    HEAVY_MODE = 'Heavy'
-    AVALIABLE_MODES = [LIGHT_MODE, HEAVY_MODE]
-    DEFAULT_PRESS_TIME = .1
-
-    def __init__(self,
-                 mode: str,
-                 hwnd: Handle,
-                 key_press_time: float = DEFAULT_PRESS_TIME):
-        '''
-        Creates a new AntiAFK thread
-        :param mode: The mode of the AntiAFK thread
-        :param hwnd: The window handle of the game
-        '''
-
-        if mode not in self.AVALIABLE_MODES:
-            raise ValueError(f"Invalid mode: {mode}")
-
-        if not win32gui.IsWindow(hwnd):
-            raise ValueError(f"Invalid window handle: {hwnd}")
-
-        self.mode = mode
-        self.valorant_hwnd = hwnd
-
-        super().__init__()
-        self.running = False
-
-        self._jump_delay = 5
-
-        if self.mode == self.HEAVY_MODE:
-            self.path = None
-            self._wasd_sequence = []
-            self._key_press_time = key_press_time
-
-    @property
-    def _jump_delay_diff(self):
-        '''Returns the 1/4 of the jump delay'''
-        return self._jump_delay / 4
-
-    def update_settings(self, settings: dict):
-        '''Updates the settings of the AntiAFK thread'''
-        print(settings)
-        if self.mode == self.LIGHT_MODE:
-            self._jump_delay = float(
-                settings.get('light_mode_delay', self._jump_delay))
-            return
-
-        self._wasd_sequence = settings.get('heavy_mode_path',
-                                           self._wasd_sequence)
-        self._key_press_time = float(
-            settings.get('heavy_mode_delay', self._key_press_time))
-        
-
-    @property
-    def jump_delay(self):
-        '''Returns a random delay between the jump delay +- jump delay difference'''
-        return random.uniform(self._jump_delay - self._jump_delay_diff,
-                              self._jump_delay + self._jump_delay_diff)
-
-    def send_key(self, key: Hexadecimal, delay: float):
-        '''Sends a key to the game'''
-        win32api.SendMessage(self.valorant_hwnd, win32con.WM_KEYDOWN, key, 0)
-        wait(delay)
-        win32api.SendMessage(self.valorant_hwnd, win32con.WM_KEYUP, key, 0)
-
-    def light_mode(self):
-        '''
-        Runs the light mode - just jumps with random delay between jumps and
-        rare other key presses and mouse movements
-        '''
-
-        while self.running:
-            self.send_key(Keys.SPACE, self.DEFAULT_PRESS_TIME)
-            wait(self.jump_delay)
-
-    def heavy_mode(self):
-        '''
-        Runs the heavy mode - moves along a random path and rarely does random
-        jumps and mouse movements
-        '''
-
-        while self.running:
-            self.path = [(Keys.W, self._key_press_time),
-                         (Keys.A, self._key_press_time),
-                         (Keys.S, self._key_press_time),
-                         (Keys.D, self._key_press_time)]
-
-            for key, time in self.path:
-                self.send_key(key, time)
-
-    def run(self):
-        '''Starts the anti afk thread'''
-        self.running = True
-        if self.mode == self.LIGHT_MODE:
-            self.light_mode()
-        elif self.mode == self.HEAVY_MODE:
-            self.heavy_mode()
-
-    def stop(self):
-        '''Stops the anti afk thread'''
-        self.running = False
+def find_window(window_name) -> Handle | None:
+    """Returns the window handle if found, None if not"""
+    windows = []
+    win32gui.EnumWindows(lambda hwnd, windows: windows.append(hwnd),
+                         windows)
+    for window in windows:
+        if window_name in win32gui.GetWindowText(window):
+            return window
 
 
-# GUI class for the AntiAFK program powered by PyQt6
+
 class MainWindow(QMainWindow):
-
-    class AntiAFKStatus:
+    class KeySenderStatus:
         NOT_WORKING = "<font color='red'>Not working</font>"
         WORKING = "<font color='green'>Working</font>"
 
@@ -155,11 +37,11 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(self.minimumSizeHint())
         self.closeEvent = self.close
 
-        # Define variables for the AntiAFK thread
+        # Define variables for the KeySender thread
         self.aafk = None
         self._anti_afk_status = False
         self._anti_afk_settings = {}
-        self._anti_afk_mode = AntiAFK.LIGHT_MODE
+        self._anti_afk_mode = Mode.LIGHT
         self._console_open = False
         self._valorant_status = False
 
@@ -167,20 +49,20 @@ class MainWindow(QMainWindow):
         # Thread controls group #
         #########################
 
-        # Start button for creating new thread AntiAFK
+        # Start button for creating new thread KeySender
         self.start_button = QPushButton("Start")
         self.start_button.setShortcut(QKeySequence(""))
         self.start_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.start_button.clicked.connect(self.start_anti_afk)
 
-        # Stop button for stopping the AntiAFK thread
+        # Stop button for stopping the KeySender thread
         self.stop_button = QPushButton("Stop")
         self.stop_button.setEnabled(False)
         self.stop_button.setShortcut(QKeySequence(""))
         self.stop_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.stop_button.clicked.connect(self.stop_anti_afk)
 
-        self.status_label = QLabel(f"Status: {self.AntiAFKStatus.NOT_WORKING}")
+        self.status_label = QLabel(f"Status: {self.KeySenderStatus.NOT_WORKING}")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Button for opening the console
@@ -200,7 +82,7 @@ class MainWindow(QMainWindow):
                                    "color: white; border-radius: 5px;")
         self.console.hide()
 
-        # Layout for changing current state of the AntiAFK thread
+        # Layout for changing current state of the KeySender thread
         self.controls_layout = QVBoxLayout()
         self.controls_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.controls_layout.addWidget(self.start_button)
@@ -214,7 +96,7 @@ class MainWindow(QMainWindow):
         self.controls_group.setLayout(self.controls_layout)
 
         ###############################
-        # Settings for AntiAFK thread #
+        # Settings for KeySender thread #
         ###############################
 
         # VALORANT window status
@@ -224,7 +106,7 @@ class MainWindow(QMainWindow):
         # Mode selection
         mode_label = QLabel("Mode:")
         mode_input = QComboBox()
-        mode_input.addItems(AntiAFK.AVALIABLE_MODES)
+        mode_input.addItems(KeySender.MODES_NAMES)
         mode_input.currentTextChanged.connect(self.change_mode)
 
         # Layout for the mode selection
@@ -240,7 +122,7 @@ class MainWindow(QMainWindow):
         self.hint_label.setWordWrap(True)
         self.hint_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
-        # Settings for each mode of AntiAFK thread (light and heavy)
+        # Settings for each mode of KeySender thread (light and heavy)
         # Light mode:
         # - Delay between SPACE key presses
         # Heavy mode:
@@ -320,18 +202,9 @@ class MainWindow(QMainWindow):
         self.valorant_status_timer.timeout.connect(self.valorant_status)
         self.valorant_status_timer.start(5000)
 
-    def find_window(self, window_name) -> Handle | None:
-        '''Returns the window handle if found, None if not'''
-        windows = []
-        win32gui.EnumWindows(lambda hwnd, windows: windows.append(hwnd),
-                             windows)
-        for window in windows:
-            if window_name in win32gui.GetWindowText(window):
-                return window
-
     def valorant_status(self):
-        '''Returns True if VALORANT is found, False if not'''
-        window = self.find_window("VALORANT")
+        """Returns True if VALORANT is found, False if not"""
+        window = find_window("VALORANT")
         if window:
             self.window_status_label.setText(
                 f"VALORANT: {self.VALORANTStatus.FOUND}")
@@ -345,68 +218,68 @@ class MainWindow(QMainWindow):
 
     @property
     def anti_afk_status(self):
-        '''Returns True if AntiAFK is working, False if not'''
+        """Returns True if KeySender is working, False if not"""
         return self._anti_afk_status
 
     @anti_afk_status.setter
     def anti_afk_status(self, value):
-        '''Sets the status of the AntiAFK thread and updates the status label'''
-        self.log(f"AntiAFK status: {value}")
+        """Sets the status of the KeySender thread and updates the status label"""
+        self.log(f"KeySender status: {value}")
         self._anti_afk_status = value
         if self._anti_afk_status:
-            self.status_label.setText(f"Status: {self.AntiAFKStatus.WORKING}")
+            self.status_label.setText(f"Status: {self.KeySenderStatus.WORKING}")
         else:
             self.status_label.setText(
-                f"Status: {self.AntiAFKStatus.NOT_WORKING}")
+                f"Status: {self.KeySenderStatus.NOT_WORKING}")
 
     def change_mode(self, mode):
-        '''Changes the mode of the AntiAFK thread'''
+        """Changes the mode of the KeySender thread"""
         self.log(f"Changing AantiAFK mode to {mode}...")
         self._anti_afk_mode = mode
 
         # Decide which label hint to show based on the current mode
         # and update the hint label. Also, show or hide the settings
         # for the current mode
-        if self._anti_afk_mode == AntiAFK.LIGHT_MODE:
+        if self._anti_afk_mode == Mode.LIGHT.value:
             self.hint_label.setText(self.light_mode_explanation)
             self.light_mode_settings_group.show()
             self.heavy_mode_settings_group.hide()
-        elif self._anti_afk_mode == AntiAFK.HEAVY_MODE:
+        elif self._anti_afk_mode == Mode.HEAVY.value:
             self.hint_label.setText(self.heavy_mode_explanation)
             self.light_mode_settings_group.hide()
             self.heavy_mode_settings_group.show()
 
     def update_aafk_settings(self, **kwargs: dict):
-        '''Updates the settings of the AntiAFK thread'''
-        self.log(f"Updating AntiAFK settings: {kwargs}...")
+        """Updates the settings of the KeySender thread"""
+        self.log(f"Updating KeySender settings: {kwargs}...")
         self._anti_afk_settings.update(kwargs)
         if self.aafk:
             self.aafk.update_settings(self._anti_afk_settings)
 
     def change_light_mode_delay(self, delay):
+        """Changes the delay of the KeySender thread"""
         delay = delay.strip().replace(",", ".")
-        '''Changes the delay of the AntiAFK thread'''
         if not delay or not delay.isdigit():
             return
 
-        self.log(f"Changing AntiAFK delay to {delay}...")
+        self.log(f"Changing KeySender delay to {delay}...")
         self.update_aafk_settings(light_mode_delay=delay)
 
     def change_heavy_mode_delay(self, delay):
+        """Changes the delay of the KeySender thread"""
         delay = delay.strip().replace(",", ".")
         if not delay or not delay.isdigit():
             return
-        '''Changes the delay of the AntiAFK thread'''
-        self.log(f"Changing AntiAFK delay to {delay}...")
+        self.log(f"Changing KeySender delay to {delay}...")
         self.update_aafk_settings(heavy_mode_delay=delay)
 
     def change_heavy_mode_path(self, path):
-        '''Changes the path of the AntiAFK thread'''
-        self.log(f"Changing AntiAFK path to {path}...")
+        """Changes the path of the KeySender thread"""
+        self.log(f"Changing KeySender path to {path}...")
         self.update_aafk_settings(heavy_mode_path=path)
 
     def toggle_console(self):
-        '''Opens the console if it's closed, closes it if it's open'''
+        """Opens the console if it's closed, closes it if it's open"""
         if not self._console_open:
             self.console_button.setText("Close console")
             self.console.show()
@@ -418,42 +291,35 @@ class MainWindow(QMainWindow):
             # self.adjustSize() TODO: make it work and read docs about this method
 
     def log(self, text):
-        '''Logs text to the console'''
+        """Logs text to the console"""
         self.console.append(text)
         self.console.verticalScrollBar().setValue(
             self.console.verticalScrollBar().maximum())
 
     def start_anti_afk(self):
-        window = self.find_window("VALORANT")
+        window = find_window("VALORANT")
         assert window, "VALORANT window not found"
 
-        self.log(f'Starting AntiAFK with mode "{self._anti_afk_mode}"...')
+        self.log(f'Starting KeySender with mode "{self._anti_afk_mode}"...')
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
 
-        self.aafk = AntiAFK(mode=self._anti_afk_mode, hwnd=window)
+        self.aafk = KeySender(mode=self._anti_afk_mode, window_handle=window)
         self.anti_afk_status = True
         self.aafk.start()
 
     def stop_anti_afk(self):
-        assert self.aafk, "AntiAFK not created"
+        assert self.aafk, "KeySender not created"
 
-        self.log("Killing AntiAFK...")
+        self.log("Killing KeySender...")
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.anti_afk_status = False
         self.aafk.stop()
 
     def close(self, a0: QCloseEvent):
-        '''Stops the AntiAFK thread when the window is closed'''
+        """Stops the KeySender thread when the window is closed"""
         if self.aafk:
-            self.log("Killing AntiAFK...")
+            self.log("Killing KeySender...")
             self.stop_anti_afk()
         a0.accept()
-
-
-if __name__ == "__main__":
-    app = QApplication([])
-    window = MainWindow(None, Qt.WindowType.Widget)
-    window.show()
-    app.exec()
