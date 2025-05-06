@@ -1,5 +1,8 @@
-test.py
-
-/.vscode
-/output
-/.idea
+__pycache__/
+*.py[cod]
+*$py.class
+.idea/
+.vscode/
+*.spec
+build/
+dist/
