@@ -1,17 +1,17 @@
-# Anti-AFK for VALORANT
+# Anti-AFK для VALORANT 🎮
 
-This is a simple Anti-AFK for VALORANT. GUI is made with PyQt5 and preventing game from going AFK is made with pywin32 (e.g. win32api, ...).
+Это простая программа Anti-AFK для VALORANT, которая не даст вам быть исключенным из игры за бездействие. Графический интерфейс создан с помощью PyQt6, а предотвращение AFK реализовано с использованием pywin32 (win32api и др.).
 
-## Usage
+## Как использовать 🚀
 
-1. Install requirements with `pip install -r requirements.txt`
-2. Run `python main.py`
-3. Run VALORANT
-4. When you want to start the Anti-AFK, click "Start" button
-5. Good luck!
+1. Установите необходимые зависимости командой `pip install -r requirements.txt`
+2. Запустите программу командой `python main.py`
+3. Запустите VALORANT
+4. Когда захотите активировать Anti-AFK, нажмите кнопку "Старт"
+5. Удачной игры! 🍀
 
-## TODO
+## Планы на будущее 📋
 
-- [ ] Add more modes (e.g., mouse movement, path along the map, ...)
-- [ ] Add more detailed settings
-- [ ] Make a window more flexible and pretty (make a window save its minimum size and more)
+- [ ] Добавить новые режимы (движение мыши, перемещение по карте и др.)
+- [ ] Расширить настройки программы
+- [ ] Улучшить внешний вид окна (сохранение минимального размера и другие улучшения)
