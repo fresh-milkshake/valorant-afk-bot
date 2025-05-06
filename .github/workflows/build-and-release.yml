@@ -1,16 +1,14 @@
 name: Build and Release
 
 on:
-  push:
-    branches:
-      - main
-      - dev
   pull_request:
+    types: [closed]
     branches:
       - main
 
 jobs:
   build:
+    if: github.event.pull_request.merged == true
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -47,7 +45,6 @@ jobs:
 
   release:
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     
     steps:
