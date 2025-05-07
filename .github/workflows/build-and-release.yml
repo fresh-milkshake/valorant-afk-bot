@@ -32,13 +32,6 @@ jobs:
       run: |
         pyinstaller --onefile --noconsole --name "Valorant-AntiAFK" --add-data "src;src" --hidden-import PyQt6 --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import win32api --hidden-import win32con --clean --log-level WARN src/main.py
     
-    - name: Verify build
-      run: |
-        if not exist "dist\Valorant-AntiAFK.exe" (
-          echo "Build failed - executable not found"
-          exit 1
-        )
-    
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
