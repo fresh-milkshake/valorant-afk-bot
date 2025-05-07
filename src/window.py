@@ -1,8 +1,19 @@
 import win32gui
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QKeySequence, QTextOption, QFont, QDoubleValidator, QCloseEvent
-from PyQt6.QtWidgets import (QMainWindow, QSizePolicy, QPushButton, QLabel, QTextEdit, QVBoxLayout, QGroupBox, QComboBox,
-                             QHBoxLayout, QLineEdit, QWidget)
+from PyQt6.QtWidgets import (
+    QMainWindow,
+    QSizePolicy,
+    QPushButton,
+    QLabel,
+    QTextEdit,
+    QVBoxLayout,
+    QGroupBox,
+    QComboBox,
+    QHBoxLayout,
+    QLineEdit,
+    QWidget,
+)
 
 from sender import Mode, KeySender
 from mytypes import Handle
@@ -10,10 +21,11 @@ from mytypes import Handle
 
 def find_window(window_name: str) -> Handle | None:
     """Returns the window handle if found, None if not"""
+
     def enum_windows_callback(hwnd, windows):
         if window_name in win32gui.GetWindowText(hwnd):
             windows.append(hwnd)
-    
+
     windows = []
     win32gui.EnumWindows(enum_windows_callback, windows)
     return windows[0] if windows else None
@@ -21,17 +33,74 @@ def find_window(window_name: str) -> Handle | None:
 
 class MainWindow(QMainWindow):
     class Status:
-        NOT_WORKING = "<font color='red'>Not working</font>"
-        WORKING = "<font color='green'>Working</font>"
-        NOT_FOUND = "<font color='red'>Not found</font>"
-        FOUND = "<font color='green'>Found</font>"
+        NOT_WORKING = "<font color='#ff4444'>Not working</font>"
+        WORKING = "<font color='#44ff44'>Working</font>"
+        NOT_FOUND = "<font color='#ff4444'>Not found</font>"
+        FOUND = "<font color='#44ff44'>Found</font>"
 
     def __init__(self, parent=None, flags=Qt.WindowType.Widget):
         super().__init__(parent, flags)
 
-        self.setWindowTitle("Anti-AFK")
+        self.setWindowTitle("Valorant Anti-AFK")
         self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        self.setMinimumSize(self.minimumSizeHint())
+        self.setMinimumSize(400, 300)
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #2b2b2b;
+            }
+            QGroupBox {
+                color: #ffffff;
+                border: 1px solid #3d3d3d;
+                border-radius: 5px;
+                margin-top: 1ex;
+                padding: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 3px;
+            }
+            QPushButton {
+                background-color: #3d3d3d;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                min-width: 100px;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+            QPushButton:disabled {
+                background-color: #2d2d2d;
+                color: #666666;
+            }
+            QLabel {
+                color: #ffffff;
+            }
+            QLineEdit {
+                background-color: #3d3d3d;
+                color: white;
+                border: 1px solid #4d4d4d;
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QComboBox {
+                background-color: #3d3d3d;
+                color: white;
+                border: 1px solid #4d4d4d;
+                border-radius: 4px;
+                padding: 4px;
+                min-width: 100px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border: none;
+            }
+        """)
 
         self.aafk = None
         self._anti_afk_status = False
@@ -50,25 +119,31 @@ class MainWindow(QMainWindow):
     def _init_ui(self):
         self.start_button = self._create_button("Start", enabled=True)
         self.stop_button = self._create_button("Stop", enabled=False)
-        self.console_button = self._create_button("Open console", style="color: gray;")
-        
+        self.console_button = self._create_button(
+            "Open Console", style="color: #888888;"
+        )
+
         self.status_label = QLabel(f"Status: {self.Status.NOT_WORKING}")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet("font-size: 14px; font-weight: bold;")
 
         self.console = self._create_console()
-        
+
         controls_layout = QVBoxLayout()
         controls_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        controls_layout.setSpacing(10)
         controls_layout.addWidget(self.start_button)
         controls_layout.addWidget(self.stop_button)
         controls_layout.addWidget(self.console_button)
         controls_layout.addWidget(self.status_label)
         controls_layout.addWidget(self.console)
+        controls_layout.addStretch()
 
         self.controls_group = QGroupBox("Controls")
         self.controls_group.setLayout(controls_layout)
 
         self.window_status_label = QLabel()
+        self.window_status_label.setStyleSheet("font-size: 14px; font-weight: bold;")
         self.update_valorant_status()
 
         mode_input = QComboBox()
@@ -76,10 +151,12 @@ class MainWindow(QMainWindow):
         mode_layout = QHBoxLayout()
         mode_layout.addWidget(QLabel("Mode:"))
         mode_layout.addWidget(mode_input)
+        mode_layout.addStretch()
 
         self.hint_label = QLabel()
         self.hint_label.setWordWrap(True)
         self.hint_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.hint_label.setStyleSheet("color: #888888; font-style: italic;")
 
         self.light_mode_settings_group = self._create_light_mode_settings()
         self.heavy_mode_settings_group = self._create_heavy_mode_settings()
@@ -87,17 +164,20 @@ class MainWindow(QMainWindow):
 
         settings_layout = QVBoxLayout()
         settings_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        settings_layout.setSpacing(10)
         settings_layout.addWidget(self.window_status_label)
         settings_layout.addLayout(mode_layout)
         settings_layout.addWidget(self.hint_label)
         settings_layout.addWidget(self.light_mode_settings_group)
         settings_layout.addWidget(self.heavy_mode_settings_group)
+        settings_layout.addStretch()
 
         settings_group = QGroupBox("Settings")
         settings_group.setLayout(settings_layout)
 
         main_layout = QHBoxLayout()
         main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        main_layout.setSpacing(20)
         main_layout.addWidget(self.controls_group)
         main_layout.addWidget(settings_group)
 
@@ -111,16 +191,24 @@ class MainWindow(QMainWindow):
         button.setShortcut(QKeySequence(""))
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         if style:
-            button.setStyleSheet(style)
+            button.setStyleSheet(button.styleSheet() + style)
         return button
 
     def _create_console(self):
-        console = QTextEdit('')
+        console = QTextEdit("")
         console.setReadOnly(True)
         console.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
         console.setWordWrapMode(QTextOption.WrapMode.NoWrap)
         console.setFont(QFont("Consolas", 10))
-        console.setStyleSheet("background-color: black; color: white; border-radius: 5px;")
+        console.setStyleSheet("""
+            QTextEdit {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #3d3d3d;
+                border-radius: 4px;
+                padding: 8px;
+            }
+        """)
         console.hide()
         return console
 
@@ -128,12 +216,14 @@ class MainWindow(QMainWindow):
         delay_input = QLineEdit()
         delay_input.setPlaceholderText("5.0")
         delay_input.setValidator(QDoubleValidator(0.0, 10, 4))
+        delay_input.setMinimumWidth(100)
 
         layout = QHBoxLayout()
-        layout.addWidget(QLabel("Space delay:"))
+        layout.addWidget(QLabel("Space delay (seconds):"))
         layout.addWidget(delay_input)
+        layout.addStretch()
 
-        group = QGroupBox("Light mode settings")
+        group = QGroupBox("Light Mode Settings")
         group.setLayout(layout)
         return group
 
@@ -141,17 +231,27 @@ class MainWindow(QMainWindow):
         delay_input = QLineEdit()
         delay_input.setPlaceholderText("0.5")
         delay_input.setValidator(QDoubleValidator(0.0, 10, 4))
+        delay_input.setMinimumWidth(100)
 
         path_input = QLineEdit()
         path_input.setPlaceholderText("WASD")
+        path_input.setMinimumWidth(100)
 
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Key delay:"))
-        layout.addWidget(delay_input)
-        layout.addWidget(QLabel("Path:"))
-        layout.addWidget(path_input)
+        delay_layout = QHBoxLayout()
+        delay_layout.addWidget(QLabel("Key delay (seconds):"))
+        delay_layout.addWidget(delay_input)
+        delay_layout.addStretch()
 
-        group = QGroupBox("Heavy mode settings")
+        path_layout = QHBoxLayout()
+        path_layout.addWidget(QLabel("Movement path:"))
+        path_layout.addWidget(path_input)
+        path_layout.addStretch()
+
+        layout.addLayout(delay_layout)
+        layout.addLayout(path_layout)
+
+        group = QGroupBox("Heavy Mode Settings")
         group.setLayout(layout)
         return group
 
@@ -194,11 +294,15 @@ class MainWindow(QMainWindow):
         self._anti_afk_mode = mode
 
         if mode == Mode.LIGHT.value:
-            self.hint_label.setText("Sending <b>SPACE</b> key press to VALORANT window every <b>N</b> seconds")
+            self.hint_label.setText(
+                "Sending <b>SPACE</b> key press to VALORANT window every <b>N</b> seconds"
+            )
             self.light_mode_settings_group.show()
             self.heavy_mode_settings_group.hide()
         elif mode == Mode.HEAVY.value:
-            self.hint_label.setText("Sending sequence of keys to <b>VALORANT</b> like you are playing <i>(WASD + SPACE)</i> every <b>N</b> seconds")
+            self.hint_label.setText(
+                "Sending sequence of keys to <b>VALORANT</b> like you are playing <i>(WASD + SPACE)</i> every <b>N</b> seconds"
+            )
             self.light_mode_settings_group.hide()
             self.heavy_mode_settings_group.show()
 
@@ -226,12 +330,16 @@ class MainWindow(QMainWindow):
 
     def toggle_console(self):
         self._console_open = not self._console_open
-        self.console_button.setText("Close console" if self._console_open else "Open console")
+        self.console_button.setText(
+            "Close console" if self._console_open else "Open console"
+        )
         self.console.setVisible(self._console_open)
 
     def log(self, text):
         self.console.append(text)
-        self.console.verticalScrollBar().setValue(self.console.verticalScrollBar().maximum())
+        self.console.verticalScrollBar().setValue(
+            self.console.verticalScrollBar().maximum()
+        )
 
     def start_anti_afk(self):
         window = find_window("VALORANT")
