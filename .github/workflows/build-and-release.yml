@@ -29,9 +29,8 @@ jobs:
         pip install pyinstaller
     
     - name: Build with PyInstaller
-      run: |
-        pyinstaller --onefile --noconsole --name "Valorant-AntiAFK" --add-data "src;src" --hidden-import PyQt6 --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import win32api --hidden-import win32con --clean --log-level WARN src/main.py
-    
+      run: pyinstaller --onefile --noconsole --name "Valorant-AntiAFK" --add-data "src;src" --hidden-import PyQt6 --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import win32api --hidden-import win32con --hidden-import pkgutil --hidden-import importlib --hidden-import importlib.machinery --hidden-import importlib.util --collect-all PyQt6 --clean --log-level WARN src/main.py
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
