@@ -1,2 +1,2 @@
-Handle = int
-Hexadecimal = int
+Hexadecimal = int  # Шестнадцатеричное значение
+Handle = int  # Дескриптор окна

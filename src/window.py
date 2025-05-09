@@ -1,6 +1,13 @@
 import win32gui
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QKeySequence, QTextOption, QFont, QDoubleValidator, QCloseEvent
+from PyQt6.QtCore import Qt, QTimer, QDateTime
+from PyQt6.QtGui import (
+    QKeySequence,
+    QTextOption,
+    QFont,
+    QDoubleValidator,
+    QCloseEvent,
+    QIcon,
+)
 from PyQt6.QtWidgets import (
     QMainWindow,
     QSizePolicy,
@@ -20,7 +27,7 @@ from mytypes import Handle
 
 
 def find_window(window_name: str) -> Handle | None:
-    """Returns the window handle if found, None if not"""
+    """Возвращает хэндл окна если найдено, иначе None"""
 
     def enum_windows_callback(hwnd, windows):
         if window_name in win32gui.GetWindowText(hwnd):
@@ -33,17 +40,17 @@ def find_window(window_name: str) -> Handle | None:
 
 class MainWindow(QMainWindow):
     class Status:
-        NOT_WORKING = "<font color='#ff4444'>Not working</font>"
-        WORKING = "<font color='#44ff44'>Working</font>"
-        NOT_FOUND = "<font color='#ff4444'>Not found</font>"
-        FOUND = "<font color='#44ff44'>Found</font>"
+        NOT_WORKING = "<font color='#ff4444'>Не активно</font>"
+        WORKING = "<font color='#44ff44'>Работает</font>"
+        NOT_FOUND = "<font color='#ff4444'>Не найдено</font>"
+        FOUND = "<font color='#44ff44'>Найдено</font>"
 
     def __init__(self, parent=None, flags=Qt.WindowType.Widget):
         super().__init__(parent, flags)
 
-        self.setWindowTitle("Valorant Anti-AFK")
+        self.setWindowTitle("Valorant Анти-AFK")
         self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        self.setMinimumSize(400, 300)
+        self.setMinimumSize(450, 350)
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #2b2b2b;
@@ -51,25 +58,33 @@ class MainWindow(QMainWindow):
             QGroupBox {
                 color: #ffffff;
                 border: 1px solid #3d3d3d;
-                border-radius: 5px;
+                border-radius: 8px;
                 margin-top: 1ex;
-                padding: 10px;
+                padding: 12px;
+                background-color: #333333;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 left: 10px;
-                padding: 0 3px;
+                padding: 0 5px;
+                background-color: #333333;
+                font-weight: bold;
             }
             QPushButton {
                 background-color: #3d3d3d;
                 color: white;
                 border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                min-width: 100px;
+                padding: 10px 20px;
+                border-radius: 6px;
+                min-width: 120px;
+                font-weight: bold;
             }
             QPushButton:hover {
                 background-color: #4d4d4d;
+                border: 1px solid #5d5d5d;
+            }
+            QPushButton:pressed {
+                background-color: #353535;
             }
             QPushButton:disabled {
                 background-color: #2d2d2d;
@@ -82,23 +97,39 @@ class MainWindow(QMainWindow):
                 background-color: #3d3d3d;
                 color: white;
                 border: 1px solid #4d4d4d;
-                border-radius: 4px;
-                padding: 4px;
+                border-radius: 5px;
+                padding: 6px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #6d6d6d;
             }
             QComboBox {
                 background-color: #3d3d3d;
                 color: white;
                 border: 1px solid #4d4d4d;
-                border-radius: 4px;
-                padding: 4px;
-                min-width: 100px;
+                border-radius: 5px;
+                padding: 6px;
+                min-width: 120px;
+            }
+            QComboBox:hover {
+                border: 1px solid #5d5d5d;
             }
             QComboBox::drop-down {
                 border: none;
+                width: 20px;
             }
             QComboBox::down-arrow {
-                image: none;
-                border: none;
+                width: 14px;
+                height: 14px;
+                image: url(assets/down-arrow.png);
+            }
+            QTextEdit {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #3d3d3d;
+                border-radius: 5px;
+                padding: 8px;
+                selection-background-color: #3d3d3d;
             }
         """)
 
@@ -117,21 +148,23 @@ class MainWindow(QMainWindow):
         self.valorant_status_timer.start(5000)
 
     def _init_ui(self):
-        self.start_button = self._create_button("Start", enabled=True)
-        self.stop_button = self._create_button("Stop", enabled=False)
+        self.start_button = self._create_button("Запустить", enabled=True)
+        self.stop_button = self._create_button("Остановить", enabled=False)
         self.console_button = self._create_button(
-            "Open Console", style="color: #888888;"
+            "Открыть консоль", style="color: #cccccc;"
         )
 
-        self.status_label = QLabel(f"Status: {self.Status.NOT_WORKING}")
+        self.status_label = QLabel(f"Статус: {self.Status.NOT_WORKING}")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        self.status_label.setStyleSheet(
+            "font-size: 14px; font-weight: bold; padding: 5px;"
+        )
 
         self.console = self._create_console()
 
         controls_layout = QVBoxLayout()
         controls_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        controls_layout.setSpacing(10)
+        controls_layout.setSpacing(12)
         controls_layout.addWidget(self.start_button)
         controls_layout.addWidget(self.stop_button)
         controls_layout.addWidget(self.console_button)
@@ -139,24 +172,29 @@ class MainWindow(QMainWindow):
         controls_layout.addWidget(self.console)
         controls_layout.addStretch()
 
-        self.controls_group = QGroupBox("Controls")
+        self.controls_group = QGroupBox("Управление")
         self.controls_group.setLayout(controls_layout)
 
         self.window_status_label = QLabel()
-        self.window_status_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        self.window_status_label.setStyleSheet(
+            "font-size: 14px; font-weight: bold; padding: 5px;"
+        )
         self.update_valorant_status()
 
         mode_input = QComboBox()
-        mode_input.addItems(KeySender.MODES_NAMES)
+        mode_input.addItem("Прыжки")
+        mode_input.addItem("WASD")
         mode_layout = QHBoxLayout()
-        mode_layout.addWidget(QLabel("Mode:"))
+        mode_layout.addWidget(QLabel("Режим работы:"))
         mode_layout.addWidget(mode_input)
         mode_layout.addStretch()
 
         self.hint_label = QLabel()
         self.hint_label.setWordWrap(True)
         self.hint_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.hint_label.setStyleSheet("color: #888888; font-style: italic;")
+        self.hint_label.setStyleSheet(
+            "color: #aaaaaa; font-style: italic; padding: 5px;"
+        )
 
         self.light_mode_settings_group = self._create_light_mode_settings()
         self.heavy_mode_settings_group = self._create_heavy_mode_settings()
@@ -164,7 +202,7 @@ class MainWindow(QMainWindow):
 
         settings_layout = QVBoxLayout()
         settings_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        settings_layout.setSpacing(10)
+        settings_layout.setSpacing(12)
         settings_layout.addWidget(self.window_status_label)
         settings_layout.addLayout(mode_layout)
         settings_layout.addWidget(self.hint_label)
@@ -172,7 +210,7 @@ class MainWindow(QMainWindow):
         settings_layout.addWidget(self.heavy_mode_settings_group)
         settings_layout.addStretch()
 
-        settings_group = QGroupBox("Settings")
+        settings_group = QGroupBox("Настройки")
         settings_group.setLayout(settings_layout)
 
         main_layout = QHBoxLayout()
@@ -184,6 +222,9 @@ class MainWindow(QMainWindow):
         main_widget = QWidget()
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
+
+        # Установите подсказки для режимов
+        self._update_mode_hint(Mode.LIGHT)
 
     def _create_button(self, text, enabled=True, style=None):
         button = QPushButton(text)
@@ -202,11 +243,25 @@ class MainWindow(QMainWindow):
         console.setFont(QFont("Consolas", 10))
         console.setStyleSheet("""
             QTextEdit {
-                background-color: #1e1e1e;
+                background-color: #1a1a1a;
                 color: #ffffff;
                 border: 1px solid #3d3d3d;
-                border-radius: 4px;
-                padding: 8px;
+                border-radius: 5px;
+                padding: 10px;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #2d2d2d;
+                width: 12px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #4d4d4d;
+                min-height: 20px;
+                border-radius: 3px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
             }
         """)
         console.hide()
@@ -219,11 +274,11 @@ class MainWindow(QMainWindow):
         delay_input.setMinimumWidth(100)
 
         layout = QHBoxLayout()
-        layout.addWidget(QLabel("Space delay (seconds):"))
+        layout.addWidget(QLabel("Задержка прыжка (сек):"))
         layout.addWidget(delay_input)
         layout.addStretch()
 
-        group = QGroupBox("Light Mode Settings")
+        group = QGroupBox("Настройки режима прыжков")
         group.setLayout(layout)
         return group
 
@@ -237,21 +292,26 @@ class MainWindow(QMainWindow):
         path_input.setPlaceholderText("WASD")
         path_input.setMinimumWidth(100)
 
+        info_label = QLabel("Укажите клавиши для перемещения (например, WASD, WS, AD и т.д.)")
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("color: #aaaaaa; font-style: italic; font-size: 10px;")
+
         layout = QVBoxLayout()
         delay_layout = QHBoxLayout()
-        delay_layout.addWidget(QLabel("Key delay (seconds):"))
+        delay_layout.addWidget(QLabel("Задержка нажатия (сек):"))
         delay_layout.addWidget(delay_input)
         delay_layout.addStretch()
 
         path_layout = QHBoxLayout()
-        path_layout.addWidget(QLabel("Movement path:"))
+        path_layout.addWidget(QLabel("Путь перемещения:"))
         path_layout.addWidget(path_input)
         path_layout.addStretch()
 
         layout.addLayout(delay_layout)
         layout.addLayout(path_layout)
+        layout.addWidget(info_label)
 
-        group = QGroupBox("Heavy Mode Settings")
+        group = QGroupBox("Настройки режима WASD")
         group.setLayout(layout)
         return group
 
@@ -260,23 +320,30 @@ class MainWindow(QMainWindow):
         self.stop_button.clicked.connect(self.stop_anti_afk)
         self.console_button.clicked.connect(self.toggle_console)
 
-        mode_input = self.findChild(QComboBox)
-        mode_input.currentTextChanged.connect(self.change_mode)
+        # Получаем доступ к комбобоксу режима работы
+        mode_combobox = self.findChild(QComboBox)
+        mode_combobox.currentIndexChanged.connect(
+            lambda index: self.change_mode(Mode.LIGHT if index == 0 else Mode.HEAVY)
+        )
 
-        light_delay_input = self.light_mode_settings_group.findChild(QLineEdit)
-        light_delay_input.textChanged.connect(self.change_light_mode_delay)
+        # Получаем доступ к настройкам легкого режима
+        delay_input = self.light_mode_settings_group.findChild(QLineEdit)
+        delay_input.textChanged.connect(self.change_light_mode_delay)
 
-        heavy_delay_input = self.heavy_mode_settings_group.findChildren(QLineEdit)[0]
-        heavy_path_input = self.heavy_mode_settings_group.findChildren(QLineEdit)[1]
-        heavy_delay_input.textChanged.connect(self.change_heavy_mode_delay)
-        heavy_path_input.textChanged.connect(self.change_heavy_mode_path)
+        # Получаем доступ к настройкам тяжелого режима
+        heavy_mode_inputs = self.heavy_mode_settings_group.findChildren(QLineEdit)
+        heavy_mode_inputs[0].textChanged.connect(self.change_heavy_mode_delay)
+        heavy_mode_inputs[1].textChanged.connect(self.change_heavy_mode_path)
 
     def update_valorant_status(self):
-        window = find_window("VALORANT")
-        status = self.Status.FOUND if window else self.Status.NOT_FOUND
-        self.window_status_label.setText(f"VALORANT: {status}")
-        self.controls_group.setEnabled(bool(window))
-        self._valorant_status = bool(window)
+        valorant_hwnd = find_window("VALORANT")
+        self._valorant_status = valorant_hwnd is not None
+        self.window_status_label.setText(
+            f"Valorant: {self.Status.FOUND if self._valorant_status else self.Status.NOT_FOUND}"
+        )
+        self.window_status_label.setStyleSheet(
+            f"font-size: 14px; font-weight: bold; padding: 5px;"
+        )
 
     @property
     def anti_afk_status(self):
@@ -284,90 +351,122 @@ class MainWindow(QMainWindow):
 
     @anti_afk_status.setter
     def anti_afk_status(self, value):
-        self.log(f"KeySender status: {value}")
         self._anti_afk_status = value
-        status = self.Status.WORKING if value else self.Status.NOT_WORKING
-        self.status_label.setText(f"Status: {status}")
+        self.status_label.setText(
+            f"Статус: {self.Status.WORKING if value else self.Status.NOT_WORKING}"
+        )
+        self.start_button.setEnabled(not value)
+        self.stop_button.setEnabled(value)
 
     def change_mode(self, mode):
-        self.log(f"Changing AntiAFK mode to {mode}...")
         self._anti_afk_mode = mode
-
-        if mode == Mode.LIGHT.value:
-            self.hint_label.setText(
-                "Sending <b>SPACE</b> key press to VALORANT window every <b>N</b> seconds"
-            )
+        if mode == Mode.LIGHT:
             self.light_mode_settings_group.show()
             self.heavy_mode_settings_group.hide()
-        elif mode == Mode.HEAVY.value:
-            self.hint_label.setText(
-                "Sending sequence of keys to <b>VALORANT</b> like you are playing <i>(WASD + SPACE)</i> every <b>N</b> seconds"
-            )
+        else:
             self.light_mode_settings_group.hide()
             self.heavy_mode_settings_group.show()
 
+        self._update_mode_hint(mode)
+
+    def _update_mode_hint(self, mode):
+        if mode == Mode.LIGHT:
+            self.hint_label.setText(
+                "Режим прыжков: программа имитирует случайные прыжки с заданной задержкой. "
+            )
+        else:
+            self.hint_label.setText(
+                "Режим WASD: имитация активного перемещения в разные стороны с периодическими "
+                "прыжками и нажатием Ctrl. "
+            )
+
     def update_aafk_settings(self, **kwargs):
-        self.log(f"Updating KeySender settings: {kwargs}...")
         self._anti_afk_settings.update(kwargs)
         if self.aafk:
             self.aafk.update_settings(self._anti_afk_settings)
+            self.log(f"Настройки обновлены: {kwargs}")
 
     def change_light_mode_delay(self, delay):
-        delay = delay.strip().replace(",", ".")
-        if delay and delay.replace(".", "").isdigit():
-            self.log(f"Changing KeySender delay to {delay}...")
-            self.update_aafk_settings(light_mode_delay=float(delay))
+        if delay:
+            self.update_aafk_settings(light_mode_delay=delay)
+            self.log(f"Задержка легкого режима изменена на {delay} сек")
 
     def change_heavy_mode_delay(self, delay):
-        delay = delay.strip().replace(",", ".")
-        if delay and delay.replace(".", "").isdigit():
-            self.log(f"Changing KeySender delay to {delay}...")
-            self.update_aafk_settings(heavy_mode_delay=float(delay))
+        if delay:
+            self.update_aafk_settings(heavy_mode_delay=delay)
+            self.log(f"Задержка тяжелого режима изменена на {delay} сек")
 
     def change_heavy_mode_path(self, path):
-        self.log(f"Changing KeySender path to {path}...")
-        self.update_aafk_settings(heavy_mode_path=path)
+        if path:
+            self.update_aafk_settings(heavy_mode_path=path)
+            self.log(f"Путь перемещения изменен на '{path}'")
 
     def toggle_console(self):
         self._console_open = not self._console_open
-        self.console_button.setText(
-            "Close console" if self._console_open else "Open console"
-        )
-        self.console.setVisible(self._console_open)
+        if self._console_open:
+            self.console.show()
+            self.console_button.setText("Скрыть логи")
+        else:
+            self.console.hide()
+            self.console_button.setText("Открыть логи")
 
     def log(self, text):
-        self.console.append(text)
-        self.console.verticalScrollBar().setValue(
-            self.console.verticalScrollBar().maximum()
-        )
+        """Улучшенное логирование с отметкой времени и цветовым кодированием"""
+        timestamp = QDateTime.currentDateTime().toString("HH:mm:ss")
+
+        if "ошибка" in text.lower() or "не найдено" in text.lower():
+            color = "#ff6b6b"  # красный для ошибок
+        elif "запущен" in text.lower() or "найден" in text.lower():
+            color = "#69ff69"  # зеленый для успешных действий
+        elif "изменена" in text.lower() or "обновлены" in text.lower():
+            color = "#6bcfff"  # синий для обновлений
+        elif "остановлен" in text.lower():
+            color = "#ffcc66"  # оранжевый для предупреждений/информации
+        else:
+            color = "#ffffff"  # белый для обычных сообщений
+
+        log_entry = f"<span style='color: #999999;'>[{timestamp}]</span> <span style='color: {color};'>{text}</span>"
+
+        # Scroll to bottom only if we were already at the bottom
+        scrollbar = self.console.verticalScrollBar()
+        at_bottom = scrollbar.value() == scrollbar.maximum()
+
+        self.console.append(log_entry)
+
+        if at_bottom:
+            scrollbar.setValue(scrollbar.maximum())
 
     def start_anti_afk(self):
-        window = find_window("VALORANT")
-        if not window:
-            self.log("VALORANT window not found")
+        valorant_hwnd = find_window("VALORANT")
+        if not valorant_hwnd:
+            self.log("Ошибка: Игра VALORANT не найдена!")
             return
 
-        self.log(f'Starting KeySender with mode "{self._anti_afk_mode}"...')
-        self.start_button.setEnabled(False)
-        self.stop_button.setEnabled(True)
+        if self.aafk and self.aafk.running:
+            self.log("Анти-AFK уже запущен")
+            return
 
-        self.aafk = KeySender(mode=self._anti_afk_mode, window_handle=window)
-        self.anti_afk_status = True
-        self.aafk.start()
+        try:
+            self.aafk = KeySender(self._anti_afk_mode, valorant_hwnd)
+            self.aafk.update_settings(self._anti_afk_settings)
+            self.aafk.start()
+            self.anti_afk_status = True
+            self.log(f"Анти-AFK запущен в режиме: {self._anti_afk_mode.value}")
+        except Exception as e:
+            self.log(f"Ошибка при запуске: {str(e)}")
 
     def stop_anti_afk(self):
-        if not self.aafk:
-            self.log("KeySender not created")
-            return
+        if self.aafk:
+            self.aafk.stop()
+            self.log("Анти-AFK остановлен")
 
-        self.log("Stopping KeySender...")
-        self.start_button.setEnabled(True)
-        self.stop_button.setEnabled(False)
         self.anti_afk_status = False
-        self.aafk.stop()
 
     def closeEvent(self, event: QCloseEvent):
+        """При закрытии приложения останавливаем все потоки"""
+        self.stop_anti_afk()
+        self.log("Приложение закрывается...")
+        # Дадим немного времени потокам на завершение
         if self.aafk:
-            self.log("Stopping KeySender...")
-            self.stop_anti_afk()
-        event.accept()
+            self.aafk.join(1.0)
+        super().closeEvent(event)
