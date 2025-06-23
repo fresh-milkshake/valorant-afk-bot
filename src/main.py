@@ -9,10 +9,10 @@ from window import MainWindow
 if __name__ == "__main__":
     app = QApplication([])
     
-    # Устанавливаем имя приложения и иконку
-    app.setApplicationName("Valorant Анти-AFK")
+    # Set application name and icon
+    app.setApplicationName("Valorant AFK bot")
     
-    # Проверяем наличие каталога assets и устанавливаем иконку если она существует
+    # Check for assets directory and set icon if it exists
     icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icon.png")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))

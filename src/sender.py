@@ -34,8 +34,17 @@ class Mode(Enum):
     HEAVY - Moves along a random path and rarely does random jumps
     """
 
-    LIGHT = "Прыжки"
+    LIGHT = "Jumping"
     HEAVY = "WASD"
+
+
+class MovementPattern(Enum):
+    """Different movement patterns for WASD mode"""
+    RANDOM = "random"
+    CIRCLE = "circle"
+    STRAFE = "strafe"
+    FORWARD_BACK = "forward_back"
+    CUSTOM = "custom"
 
 
 class KeySender(threading.Thread):
@@ -68,37 +77,37 @@ class KeySender(threading.Thread):
             mode = Mode(mode)
 
         if mode not in self.AVAILABLE_MODES:
-            raise ValueError(f"Неверный режим: {mode}")
+            raise ValueError(f"Invalid mode: {mode}")
 
         if not win32gui.IsWindow(window_handle):
-            raise ValueError(f"Неверный дескриптор окна: {window_handle}")
+            raise ValueError(f"Invalid window handle: {window_handle}")
 
         self.mode = mode
         self.valorant_hwnd = window_handle
         self._press_duration = press_duration
         self._last_window_check = 0
-        self._window_check_interval = 10.0  # проверять окно каждые 10 секунд
+        self._window_check_interval = 10.0  # check window every 10 seconds
 
         super().__init__()
-        self.daemon = True  # делаем поток демоном, чтобы он завершался с основным
+        self.daemon = True  # make thread daemon so it terminates with main
         self.running = False
 
         self._jump_delay = self.DEFAULT_LIGHT_DELAY
         self._last_action_time = time.time()
         
-        # Расширенный набор случайных действий
+        # Extended set of random actions
         self._random_actions = [
-            (Keys.SHIFT, 0.2),    # Бег
-            (Keys.CTRL, 0.15),    # Присед
-            (Keys.SPACE, 0.1),    # Прыжок
+            (Keys.SHIFT, 0.2),    # Running
+            (Keys.CTRL, 0.15),    # Crouch
+            (Keys.SPACE, 0.1),    # Jump
         ]
         
-        # Случайные комбинации клавиш для имитации действий игрока
+        # Random key combinations to simulate player actions
         self._action_combos = [
-            [(Keys.W, 0.1), (Keys.SPACE, 0.1)],                   # Бег и прыжок
-            [(Keys.CTRL, 0.15), (Keys.W, 0.1)],                   # Присесть и идти
-            [(Keys.SHIFT, 0.2), (Keys.W, 0.15)],   # Бег вперед
-            [(Keys.A, 0.1), (Keys.D, 0.1)],                       # Стрейф влево-вправо
+            [(Keys.W, 0.1), (Keys.SPACE, 0.1)],                   # Run and jump
+            [(Keys.CTRL, 0.15), (Keys.W, 0.1)],                   # Crouch and walk
+            [(Keys.SHIFT, 0.2), (Keys.W, 0.15)],   # Run forward
+            [(Keys.A, 0.1), (Keys.D, 0.1)],                       # Strafe left-right
         ]
 
         if self.mode == Mode.HEAVY:
@@ -106,9 +115,19 @@ class KeySender(threading.Thread):
             self._wasd_sequence = []
             self._key_press_time = self.DEFAULT_HEAVY_DELAY
             self._movement_path = self.DEFAULT_PATH
-            self._combo_chance = 0.6  # Шанс выполнить комбинацию клавиш
-            self._movement_pattern_count = 0  # Счетчик паттернов движения
-            self._max_movement_patterns = random.randint(3, 7)  # Макс. паттернов до смены
+            self._combo_chance = 0.6  # Chance to perform key combination
+            self._movement_pattern_count = 0  # Movement pattern counter
+            self._max_movement_patterns = random.randint(3, 7)  # Max patterns before change
+            
+            # Enhanced WASD mode settings
+            self._movement_intensity = 0.7  # How active the movement is (0.1-1.0)
+            self._direction_change_frequency = 0.3  # How often to change direction (0.1-1.0)
+            self._action_probability = 0.4  # Probability of additional actions (0.0-1.0)
+            self._pattern_type = MovementPattern.RANDOM
+            self._strafe_preference = 0.5  # Preference for strafing vs forward/back (0.0-1.0)
+            self._movement_smoothness = 0.6  # How smooth transitions are (0.1-1.0)
+            self._pause_frequency = 0.2  # How often to pause movement (0.0-1.0)
+            self._pause_duration_range = (0.5, 2.0)  # Range for pause durations
 
     @property
     def _jump_delay_diff(self):
@@ -121,19 +140,33 @@ class KeySender(threading.Thread):
             self._jump_delay = float(settings.get("light_mode_delay", self._jump_delay))
             return
 
+        # Basic WASD settings
         self._movement_path = settings.get("heavy_mode_path", self._movement_path)
-        self._key_press_time = float(
-            settings.get("heavy_mode_delay", self._key_press_time)
-        )
+        self._key_press_time = float(settings.get("heavy_mode_delay", self._key_press_time))
         
-        # Сбрасываем счетчики для применения новых настроек
+        # Advanced WASD settings
+        self._movement_intensity = float(settings.get("movement_intensity", self._movement_intensity))
+        self._direction_change_frequency = float(settings.get("direction_change_frequency", self._direction_change_frequency))
+        self._action_probability = float(settings.get("action_probability", self._action_probability))
+        self._strafe_preference = float(settings.get("strafe_preference", self._strafe_preference))
+        self._movement_smoothness = float(settings.get("movement_smoothness", self._movement_smoothness))
+        self._pause_frequency = float(settings.get("pause_frequency", self._pause_frequency))
+        
+        pattern_type = settings.get("pattern_type", "random")
+        if isinstance(pattern_type, str):
+            try:
+                self._pattern_type = MovementPattern(pattern_type)
+            except ValueError:
+                self._pattern_type = MovementPattern.RANDOM
+        
+        # Reset counters to apply new settings
         self._movement_pattern_count = 0
         self._max_movement_patterns = random.randint(3, 7)
 
     @property
     def jump_delay(self):
         """Returns a random delay between the jump delay +- jump delay difference"""
-        variation = self._jump_delay * 0.4  # 40% вариации
+        variation = self._jump_delay * 0.4  # 40% variation
         return random.uniform(
             self._jump_delay - variation,
             self._jump_delay + variation,
@@ -152,28 +185,65 @@ class KeySender(threading.Thread):
             self.running = False
             return
             
-        # Небольшая случайная вариация в длительности нажатия
+        # Small random variation in press duration
         actual_delay = delay * random.uniform(0.85, 1.15)
         
         win32api.SendMessage(self.valorant_hwnd, win32con.WM_KEYDOWN, key, 0)
         wait(actual_delay)
         win32api.SendMessage(self.valorant_hwnd, win32con.WM_KEYUP, key, 0)
 
+    def send_key_combination(self, keys: list, durations: list):
+        """Sends multiple keys simultaneously"""
+        if not self.is_window_active():
+            self.running = False
+            return
+            
+        # Press all keys down
+        for key in keys:
+            win32api.SendMessage(self.valorant_hwnd, win32con.WM_KEYDOWN, key, 0)
+        
+        # Wait for the duration
+        wait(max(durations) * random.uniform(0.9, 1.1))
+        
+        # Release all keys
+        for key in keys:
+            win32api.SendMessage(self.valorant_hwnd, win32con.WM_KEYUP, key, 0)
+
+    def generate_movement_pattern(self):
+        """Generate movement pattern based on selected type"""
+        if self._pattern_type == MovementPattern.CIRCLE:
+            return ["W", "WD", "D", "SD", "S", "SA", "A", "WA"]
+        elif self._pattern_type == MovementPattern.STRAFE:
+            return ["A", "D"] * random.randint(2, 4)
+        elif self._pattern_type == MovementPattern.FORWARD_BACK:
+            return ["W", "S"] * random.randint(2, 3)
+        elif self._pattern_type == MovementPattern.CUSTOM:
+            return list(self._movement_path.upper())
+        else:  # RANDOM
+            directions = []
+            length = random.randint(3, 8)
+            for _ in range(length):
+                if random.random() < self._strafe_preference:
+                    directions.append(random.choice(["A", "D"]))
+                else:
+                    directions.append(random.choice(["W", "S"]))
+            return directions
+
     def perform_random_action(self):
         """Performs a random action with a small chance"""
-        if random.random() < 0.2:  # 20% шанс
+        if random.random() < (0.2 * self._action_probability):
             key, duration = random.choice(self._random_actions)
             self.send_key(key, duration)
             
-            # Иногда добавляем второе случайное действие сразу после первого
-            if random.random() < 0.3:  # 30% шанс второго действия
+            # Sometimes add a second random action right after the first
+            if random.random() < 0.3:
                 wait(random.uniform(0.05, 0.2))
                 second_key, second_duration = random.choice(self._random_actions)
-                if second_key != key:  # Избегаем повторения той же клавиши
+                if second_key != key:  # Avoid repeating the same key
                     self.send_key(second_key, second_duration)
 
     def perform_action_combo(self):
-        if random.random() < self._combo_chance:
+        if random.random() < (self._combo_chance * self._action_probability):
             combo = random.choice(self._action_combos)
             for key, duration in combo:
                 if not self.running:
@@ -194,127 +264,121 @@ class KeySender(threading.Thread):
         while self.running:
             current_time = time.time()
             if current_time - self._last_action_time >= self.jump_delay:
-                # С некоторой вероятностью выполняем комбо вместо обычного прыжка
+                # With some probability perform combo instead of regular jump
                 if combo_counter >= 3 and random.random() < 0.4:
-                    # Выполнить комбо действий
+                    # Perform combo actions
                     performed_combo = self.perform_action_combo()
                     if performed_combo:
                         combo_counter = 0
                 else:
-                    # Обычное действие - прыжок с вариациями
+                    # Regular action - jump with variations
                     self.send_key(Keys.SPACE, self._press_duration * random.uniform(0.8, 1.2))
                     combo_counter += 1
                 
-                # Выполнение случайного действия
+                # Perform random action
                 self.perform_random_action()
                 
-                # Иногда делаем более сложную последовательность
+                # Sometimes do more complex sequences
                 action_variance_counter += 1
                 if action_variance_counter >= random.randint(3, 6) and random.random() < 0.35:
-                    # Эмуляция проверки снаряжения или других действий
+                    # Emulate equipment checking or other actions
                     action_variance_counter = 0
                     sequence = []
                     
-                    # Случайная последовательность 2-4 клавиш
+                    # Random sequence of 2-4 keys
                     for _ in range(random.randint(2, 4)):
                         key, duration = random.choice(self._random_actions)
                         sequence.append((key, duration))
                     
-                    # Выполняем последовательность с разными задержками
+                    # Execute sequence with different delays
                     for key, duration in sequence:
                         if not self.running:
                             break
                         self.send_key(key, duration)
-                        # Более естественные паузы между нажатиями
+                        # More natural pauses between presses
                         wait(random.uniform(0.05, 0.25))
                 
                 self._last_action_time = current_time
             
-            # Динамическая задержка для снижения нагрузки ЦП
+            # Dynamic delay to reduce CPU load
             wait(random.uniform(0.08, 0.15))
 
     def heavy_mode(self):
         """
-        Runs the heavy mode - moves along a random path and rarely does random
-        jumps and mouse movements
+        Enhanced WASD mode with more realistic movement patterns and customizable behavior
         """
+        pattern_step = 0
+        current_pattern = self.generate_movement_pattern()
+        last_direction_change = time.time()
+        
         while self.running:
-            # Проверяем, нужно ли обновить паттерн движения
-            self._movement_pattern_count += 1
-            if self._movement_pattern_count > self._max_movement_patterns:
-                # Изменяем максимальное количество повторений паттерна
-                self._max_movement_patterns = random.randint(3, 7)
-                self._movement_pattern_count = 0
-                # Случайно решаем, будем ли использовать заданный путь или сгенерировать новый паттерн
-                if random.random() < 0.3:  # 30% шанс на случайный паттерн
-                    temp_path = ""
-                    for _ in range(random.randint(3, 6)):
-                        temp_path += random.choice("WASD")
-                    # Временно используем случайный паттерн, не меняя сохраненные настройки
-                    current_path = temp_path
+            current_time = time.time()
+            
+            # Check if we should pause movement
+            if random.random() < self._pause_frequency:
+                pause_duration = random.uniform(*self._pause_duration_range)
+                wait(pause_duration)
+                continue
+            
+            # Update movement pattern based on frequency and intensity
+            direction_change_interval = (2.0 - self._direction_change_frequency) * 3.0
+            if (current_time - last_direction_change) >= direction_change_interval:
+                current_pattern = self.generate_movement_pattern()
+                pattern_step = 0
+                last_direction_change = current_time
+            
+            # Get current movement direction
+            if pattern_step >= len(current_pattern):
+                pattern_step = 0
+                
+            direction = current_pattern[pattern_step]
+            pattern_step += 1
+            
+            # Convert direction to keys
+            movement_keys = []
+            if "W" in direction:
+                movement_keys.append(Keys.W)
+            if "A" in direction:
+                movement_keys.append(Keys.A)
+            if "S" in direction:
+                movement_keys.append(Keys.S)
+            if "D" in direction:
+                movement_keys.append(Keys.D)
+            
+            # Apply movement intensity
+            base_duration = self._key_press_time
+            movement_duration = base_duration * (0.5 + self._movement_intensity * 0.8)
+            movement_duration *= random.uniform(0.8, 1.2)  # Add some randomness
+            
+            # Execute movement
+            if movement_keys:
+                if len(movement_keys) == 1:
+                    self.send_key(movement_keys[0], movement_duration)
                 else:
-                    current_path = self._movement_path
-            else:
-                current_path = self._movement_path
+                    # Multiple keys (diagonal movement)
+                    self.send_key_combination(movement_keys, [movement_duration] * len(movement_keys))
             
-            # Преобразуем путь движения в последовательность клавиш
-            key_sequence = []
-            for char in current_path.upper():
-                if char == "W":
-                    # Случайно варьируем время удержания клавиши
-                    key_sequence.append((Keys.W, self._key_press_time * random.uniform(0.75, 1.25)))
-                elif char == "A":
-                    key_sequence.append((Keys.A, self._key_press_time * random.uniform(0.75, 1.25)))
-                elif char == "S":
-                    key_sequence.append((Keys.S, self._key_press_time * random.uniform(0.75, 1.25)))
-                elif char == "D":
-                    key_sequence.append((Keys.D, self._key_press_time * random.uniform(0.75, 1.25)))
+            # Add additional actions based on probability
+            if random.random() < (0.4 * self._action_probability):
+                if random.random() < 0.6:  # Jump
+                    wait(random.uniform(0.05, 0.15))
+                    self.send_key(Keys.SPACE, self._press_duration)
+                elif random.random() < 0.3:  # Sprint
+                    self.send_key(Keys.SHIFT, self._press_duration * 2)
+                else:  # Crouch
+                    self.send_key(Keys.CTRL, self._press_duration * 1.5)
             
-            # Добавляем прыжок и другие действия с различной вероятностью
-            if random.random() < 0.45:  # 45% шанс добавить прыжок
-                key_sequence.append((Keys.SPACE, self._press_duration * random.uniform(0.9, 1.1)))
+            # Perform random additional actions
+            self.perform_random_action()
             
-            if random.random() < 0.25:  # 25% шанс добавить бег
-                key_sequence.append((Keys.SHIFT, self._press_duration * 2 * random.uniform(0.9, 1.2)))
+            # Apply smoothness factor to pause between movements
+            base_pause = 0.1
+            smoothness_pause = base_pause * (2.0 - self._movement_smoothness)
+            wait(random.uniform(smoothness_pause * 0.5, smoothness_pause * 1.5))
             
-            if random.random() < 0.15:  # 15% шанс добавить присед
-                key_sequence.append((Keys.CTRL, self._press_duration * 1.5 * random.uniform(0.9, 1.1)))
-            
-            # С определенной вероятностью перемешиваем последовательность
-            # или сохраняем порядок для более естественного движения
-            if random.random() < 0.6:  # 60% шанс перемешать
-                random.shuffle(key_sequence)
-            
-            # Выполняем последовательность
-            for key, duration in key_sequence:
-                if not self.running:
-                    break
-                self.send_key(key, duration)
-                
-                # Шанс на дополнительное действие
-                self.perform_random_action()
-                
-                # Случайная пауза между клавишами с более естественной вариацией
-                pause_factor = 1.0
-                if key == Keys.SPACE:
-                    pause_factor = 1.5  # Более длинная пауза после прыжка
-                elif key == Keys.SHIFT:
-                    pause_factor = 0.8  # Короче пауза после спринта
-                
-                wait_time = random.uniform(0.05, 0.3) * pause_factor
-                wait(wait_time)
-            
-            # Периодически выполняем комбо-действия
-            if random.random() < 0.4:  # 40% шанс
+            # Occasionally perform combo actions
+            if random.random() < (0.3 * self._action_probability):
                 self.perform_action_combo()
-            
-            # Добавляем более естественную паузу между циклами
-            if self.running:
-                cycle_pause = random.uniform(0.15, 0.6)
-                # Иногда делаем более длинную паузу, имитируя остановку игрока
-                if random.random() < 0.15:  # 15% шанс
-                    cycle_pause *= 2.5
-                wait(cycle_pause)
 
     def run(self):
         """Starts the anti afk thread"""
@@ -325,7 +389,7 @@ class KeySender(threading.Thread):
             elif self.mode == Mode.HEAVY:
                 self.heavy_mode()
         except Exception as e:
-            print(f"Ошибка в потоке KeySender: {e}")
+            print(f"Error in KeySender thread: {e}")
             self.running = False
 
     def stop(self):
