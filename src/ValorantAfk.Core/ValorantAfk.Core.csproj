@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>ValorantAfkBot.Core</AssemblyName>
+    <RootNamespace>ValorantAfkBot.Core</RootNamespace>
+  </PropertyGroup>
+</Project>

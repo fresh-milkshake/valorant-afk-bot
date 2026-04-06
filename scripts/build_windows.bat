@@ -1,39 +1,74 @@
 @echo off
-echo Building Valorant Anti-AFK for Windows...
+setlocal
 
-:: Check if Python is installed
-python --version > nul 2>&1
+echo Building Valorant AFK Bot for Windows...
+
+dotnet --info > nul 2>&1
 if %errorlevel% neq 0 (
-    echo Python is not installed or not in PATH. Please install Python 3.6+ and try again.
+    echo .NET SDK 10.0 or newer is required and was not found in PATH.
     exit /b 1
 )
 
-:: Check if pip is installed
-pip --version > nul 2>&1
-if %errorlevel% neq 0 (
-    echo pip is not installed or not in PATH. Please install pip and try again.
+set "OUTPUT_DIR=bin"
+set "STAGING_DIR=%OUTPUT_DIR%\publish-tmp"
+set "FINAL_EXE=%OUTPUT_DIR%\anti-afk.exe"
+set "PUBLISH_EXE=%OUTPUT_DIR%\ValorantAfkBot.exe"
+set "ROOT_DIR=%CD%"
+
+if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
+
+echo Stopping running builds from %OUTPUT_DIR% if needed...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0stop_running_builds.ps1" -OutputDir "%ROOT_DIR%\%OUTPUT_DIR%"
+
+if exist "%STAGING_DIR%" rd /s /q "%STAGING_DIR%"
+mkdir "%STAGING_DIR%" > nul 2>&1
+
+del /f /q "%FINAL_EXE%" > nul 2>&1
+del /f /q "%PUBLISH_EXE%" > nul 2>&1
+
+if exist "%FINAL_EXE%" (
+    if exist "%STAGING_DIR%" rd /s /q "%STAGING_DIR%"
+    echo Failed to remove the previous %FINAL_EXE%. Close the running app and try again.
     exit /b 1
 )
 
-:: Create virtual environment if it doesn't exist
-if not exist venv (
-    echo Creating virtual environment...
-    python -m venv venv
+if exist "%PUBLISH_EXE%" (
+    if exist "%STAGING_DIR%" rd /s /q "%STAGING_DIR%"
+    echo Failed to remove the previous %PUBLISH_EXE%. Close the running app and try again.
+    exit /b 1
 )
 
-:: Activate virtual environment
-call venv\Scripts\activate
+dotnet publish src\ValorantAfk.App\ValorantAfk.App.csproj ^
+  -c Release ^
+  -r win-x64 ^
+  -p:PublishSingleFile=true ^
+  -p:SelfContained=true ^
+  -p:EnableCompressionInSingleFile=true ^
+  -p:DebugSymbols=false ^
+  -p:DebugType=None ^
+  -o "%STAGING_DIR%"
 
-:: Install dependencies
-echo Installing dependencies...
-pip install PyQt6 pywin32 pyinstaller
+if %errorlevel% neq 0 (
+    if exist "%STAGING_DIR%" rd /s /q "%STAGING_DIR%"
+    echo Build failed.
+    exit /b 1
+)
 
-:: Build executable with PyInstaller
-echo Building executable...
-pyinstaller --noconfirm --onefile --windowed --icon=assets/icon.ico --add-data="assets;assets/" --name="Valorant-AntiAFK" src/main.py
+if not exist "%STAGING_DIR%\ValorantAfkBot.exe" (
+    if exist "%STAGING_DIR%" rd /s /q "%STAGING_DIR%"
+    echo Publish completed, but the expected executable was not produced.
+    exit /b 1
+)
 
-:: Deactivate virtual environment
-call venv\Scripts\deactivate
+move /y "%STAGING_DIR%\ValorantAfkBot.exe" "%FINAL_EXE%" > nul
+if %errorlevel% neq 0 (
+    if exist "%STAGING_DIR%" rd /s /q "%STAGING_DIR%"
+    echo Failed to move published executable into %FINAL_EXE%.
+    exit /b 1
+)
 
-echo Build completed successfully. Executable is located in the dist folder.
-echo You can run the application by executing dist\Valorant-AntiAFK.exe
+del /f /q "%PUBLISH_EXE%" > nul 2>&1
+if exist "%STAGING_DIR%" rd /s /q "%STAGING_DIR%"
+
+echo Build completed successfully.
+echo Output: %FINAL_EXE%

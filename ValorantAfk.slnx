@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ValorantAfk.App/ValorantAfk.App.csproj" />
+    <Project Path="src/ValorantAfk.Core/ValorantAfk.Core.csproj" />
+    <Project Path="src/ValorantAfk.Tests/ValorantAfk.Tests.csproj" />
+    <Project Path="src/ValorantAfk.Windows/ValorantAfk.Windows.csproj" />
+  </Folder>
+</Solution>

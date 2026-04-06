@@ -3,8 +3,17 @@ __pycache__/
 *$py.class
 .idea/
 .vscode/
+.vs/
 *.spec
 build/
 dist/
 venv/
 utils/
+.dotnet/
+**/bin/
+**/obj/
+publish/
+publish-test/
+imgui.ini
+app-build.log
+app-restore.log
